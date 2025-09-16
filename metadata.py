@@ -8,12 +8,10 @@ from logging import getLogger
 import shutil
 import time
 
-import sftp
-from sftp import fixPath
-
 from errno import ENOENT
 
 import data
+import sftp
 
 class Metadata:
     '''
@@ -34,11 +32,17 @@ class Metadata:
             os.makedirs(self.metadataDir)
 
     def deleteMetadata(self, path):
+        if not sftp.manager.isConnected():
+            return
+        
         p = self._metadataPath(path)
         if os.path.exists(p):
             shutil.rmtree(p)
         
     def deleteParentMetadata(self, path):
+        if not sftp.manager.isConnected():
+            return
+        
         p = os.path.split(path)[0]
         self.deleteMetadata(p)
         
@@ -82,7 +86,10 @@ class Metadata:
             return os.path.join(d, operation)
                    
     def _saveMetadata(self, path, operation, d: dict | list[str] | str):  
-        self.log.debug('saveMetadata: %s: %s', operation, path)      
+        self.log.debug('saveMetadata: %s: %s', operation, path)     
+        if not sftp.manager.isConnected():
+            return
+         
         p = self._metadataPath(path, operation)
         with open(p, "w") as file:
             if d == ENOENT:

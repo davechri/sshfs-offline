@@ -1,15 +1,15 @@
 #!/usr/bin/env python
 
+import errno
 from logging import getLogger
 import os
 from pathlib import Path
 
 import getpass
+import sys
 
 import sftp
 from sftp import fixPath
-
-from errno import ENOENT
 
 from fuse import FUSE, FuseOSError, Operations
 
@@ -26,27 +26,21 @@ class Main(Operations):
     HOME_DIR = str(Path.home())
     CACHE_TIMEOUT = 5 * 60
                         
-    def __init__(self, args):
+    def __init__(self, args):        
         host = args.host
         user = args.user
         remotedir = args.remotedir
         port = args.port
-        cachetimeout = args.cachetimeout
-       
+               
         self.log = getLogger('main')
-        try:
-            os.lstat("/usr/bin/lftp")
-        except:
-            print('The lftp package must be installed')
-            exit(1)   
-
+        
         sftp.manager = sftp.SFTPManager(host, user, remotedir, port) 
-        metadata.cache = metadata.Metadata(host, remotedir, cachetimeout)
+        metadata.cache = metadata.Metadata(host, remotedir, args.cachetimeout)
         data.cache = data.Data(host, remotedir)
 
         sftp.manager.sftp() # verify connection to host
-        
-    def chmod(self, path, mode):        
+         
+    def chmod(self, path, mode):          
         metadata.cache.deleteMetadata(path)
         return sftp.manager.sftp().chmod(fixPath(path), mode)
 
@@ -54,7 +48,7 @@ class Main(Operations):
         metadata.cache.deleteMetadata(path)
         return sftp.manager.sftp().chown(fixPath(path), uid, gid)    
     
-    def create(self, path, mode):
+    def create(self, path, mode):        
         metadata.cache.deleteMetadata(path)
         metadata.cache.deleteParentMetadata(path)
         f = sftp.manager.sftp().open(fixPath(path), 'w')
@@ -62,7 +56,7 @@ class Main(Operations):
         f.close()
         return 0
 
-    def destroy(self, path):
+    def destroy(self, path):        
         sftp.manager.sftp().close()
         self.client.close()
 
@@ -71,7 +65,7 @@ class Main(Operations):
         d = metadata.cache.getattr(path, None)
         if d != None:
             if d == {}:
-                raise FuseOSError(ENOENT)
+                raise FuseOSError(errno.ENOENT)
             else:
                 self.log.debug('<- getattr: %s %s', path, d)
                 return d # cache hit
@@ -80,7 +74,7 @@ class Main(Operations):
             st = sftp.manager.sftp().lstat(fixPath(path))            
         except IOError as e: 
             metadata.cache.getattr(path, {}) # negative cache entry          
-            raise FuseOSError(ENOENT)
+            raise FuseOSError(errno.ENOENT)
 
         d = dict((key, getattr(st, key)) for key in (
             'st_atime', 'st_gid', 'st_mode', 'st_mtime', 'st_size', 'st_uid'))
@@ -94,7 +88,7 @@ class Main(Operations):
             'f_blocks', 'f_bsize', 'f_favail', 'f_ffree', 'f_files', 'f_flag',
             'f_frsize', 'f_namemax'))
 
-    def mkdir(self, path, mode):
+    def mkdir(self, path, mode):       
         metadata.cache.deleteMetadata(path)
         metadata.cache.deleteParentMetadata(path)
         return sftp.manager.sftp().mkdir(fixPath(path), mode)
@@ -126,24 +120,24 @@ class Main(Operations):
             link = sftp.manager.sftp().readlink(fixPath(path))
             return metadata.cache.readlink(path, link)
 
-    def rename(self, old, new):
+    def rename(self, old, new):        
         metadata.cache.deleteMetadata(old)
         return sftp.manager.sftp().rename(fixPath(old), fixPath(new))
 
-    def rmdir(self, path):
+    def rmdir(self, path):       
         metadata.cache.deleteMetadata(path)
         metadata.cache.deleteParentMetadata(path)
         return sftp.manager.sftp().rmdir(fixPath(path))
 
-    def symlink(self, target, source):
+    def symlink(self, target, source):       
         return sftp.manager.sftp().symlink(fixPath(source), fixPath(target))
 
-    def truncate(self, path, length, fh=None):
+    def truncate(self, path, length, fh=None):        
         metadata.cache.deleteMetadata(path)
         data.cache.removeStaleBlocks(path)
         return sftp.manager.sftp().truncate(fixPath(path), length)
 
-    def unlink(self, path):
+    def unlink(self, path):        
         metadata.cache.deleteMetadata(path)
         metadata.cache.deleteParentMetadata(path)
         data.cache.removeStaleBlocks(path)
@@ -154,7 +148,7 @@ class Main(Operations):
         data.cache.removeStaleBlocks(path)
         return sftp.manager.sftp().utime(fixPath(path), times)
 
-    def write(self, path, buf, offset, fh):
+    def write(self, path, buf, offset, fh):        
         self.log.debug('write: %s %d', path, offset)
         metadata.cache.deleteMetadata(path)  
         data.cache.removeStaleBlocks(path)
@@ -204,4 +198,4 @@ if __name__ == '__main__':
         foreground=args.debug,
         nothreads=False,
         allow_other=True,
-       )
+    )
