@@ -1,4 +1,5 @@
 
+import errno
 import math
 from pathlib import Path
 import os
@@ -12,6 +13,8 @@ from sftp import fixPath
 from errno import ENOENT
 
 import metadata
+
+from fuse import FuseOSError
 
 class Data:
     '''
@@ -27,7 +30,7 @@ class Data:
         # make data cache directory ~/.cachefs/data
         self.dataDir = os.path.join(Data.DATA_DIR, host, os.path.splitroot(basedir)[-1])
         if not os.path.exists(self.dataDir):
-            os.makedirs(self.dataDir)             
+            os.makedirs(self.dataDir)         
      
     def _dataPath(self, path: str) -> str:
         #p = path.replace('/','%').replace('\\', '%')
@@ -45,6 +48,8 @@ class Data:
         
     def removeStaleBlocks(self, path, mtime: float=None ): 
         self.log.debug('removeStaleBlocks: %s', path)    
+        if not sftp.manager.isConnected():
+            return
         dataPath = self._dataPath(path)
         dir = os.path.dirname(dataPath)
         if os.path.exists(dir):
@@ -77,7 +82,7 @@ class Data:
                         buf = file.read(size)                    
                     else:
                         buf += file.read(min(Data.BLOCK_SIZE, size-len(buf)))
-            else:
+            else: 
                 self.log.debug('read: %s read remote block: %d', path, blockNum) 
                 if i%2 == 0:
                     with sftp.manager.sftp().open(fixPath(path), 'rb') as file:                        

@@ -1,12 +1,8 @@
 cachefs
 =======
 
-A Filesystem in Userspace (fuse) implementation that uses SSH to cache remote files locally.
-Files are cached on demand as they are accessed by the local application.
-The next time the file is accessed it is read directly from the local cache, and is not downloading from the
-remote host.
-
-The cache has a default 5 minute timeout.
+Files are cached locally using the SSH protocol to connect to the remote host.
+The cache can be accessed even when the network is down.
 
 Features:
 
@@ -16,6 +12,8 @@ Features:
     server
 
   - Metadata and Data are cached locally to improve performance.
+
+  - Cached data can be accessed when the remote host is not reachable
 
   - Read/Write file system
 
