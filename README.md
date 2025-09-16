@@ -1,8 +1,8 @@
 cachefs
 =======
 
-A Filesystem in Userspace (fuse) implementaton that uses SSH to cache remote files locally.
-Files are cached on demand as they are accesed by the local application.
+A Filesystem in Userspace (fuse) implementation that uses SSH to cache remote files locally.
+Files are cached on demand as they are accessed by the local application.
 The next time the file is accessed it is read directly from the local cache, and is not downloading from the
 remote host.
 
