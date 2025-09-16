@@ -2,7 +2,7 @@ cachefs
 =======
 
 Files are cached locally using the SSH protocol to connect to the remote host.
-The cache can be accesed even when the network is down.
+The cache can be accessed even when the network is down.
 
 Features:
 
