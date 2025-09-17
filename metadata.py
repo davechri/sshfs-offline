@@ -17,7 +17,7 @@ class Metadata:
     '''
     Metadata cache for getattr, readdir and read link operations.
     '''
-    METADATA_DIR = os.path.join(Path.home(), '.cachefs', 'metadata')
+    METADATA_DIR = os.path.join(Path.home(), '.sshfs-offline', 'metadata')
     GETATTR = 'getattr'
     READDIR = 'readdir'
     READLINK = 'readlink'
