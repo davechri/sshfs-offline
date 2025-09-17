@@ -21,13 +21,13 @@ class Data:
     On demand data file cache.   The files are cached in 64k chunks (blocks).  Only the blocks of the file that is read by
     the user are cached.  Subsequent reads for the same data block are very fast.
     '''
-    DATA_DIR = os.path.join(Path.home(), '.cachefs', 'data') 
+    DATA_DIR = os.path.join(Path.home(), '.sshfs-offline', 'data') 
     BLOCK_SIZE = sftp.BLOCK_SIZE  
  
     def __init__(self, host: str, basedir: str):
         self.log = getLogger('data')
             
-        # make data cache directory ~/.cachefs/data
+        # make data cache directory ~/.sshfs-offline/data
         self.dataDir = os.path.join(Data.DATA_DIR, host, os.path.splitroot(basedir)[-1])
         if not os.path.exists(self.dataDir):
             os.makedirs(self.dataDir)         

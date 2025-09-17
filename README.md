@@ -1,19 +1,15 @@
-cachefs
-=======
+sshfs-offline
+=============
 
-Files are cached locally using the SSH protocol to connect to the remote host.
-The cache can be accessed even when the network is down.
+Python implementation of sshfs providing offline access to cached files.
 
 Features:
 
   - Based on FUSE (Filesystem in Userspace framework for Linux)
 
-  - Multithreading: more than one request can be on it's way to the
-    server
-
   - Metadata and Data are cached locally to improve performance.
 
-  - Cached data can be accessed when the remote host is not reachable
+  - Offline access to cached data when the remote host is not reachable
 
   - Read/Write file system
 
@@ -30,7 +26,7 @@ How to mount a filesystem
 Usage:
 
     ```sh
-    usage: cachefs.py [-h] [-p PORT] [-u USER] [-d REMOTEDIR] [--debug] [--cachetimeout CACHETIMEOUT] host mountpoint
+    usage: sshfs-offline.py [-h] [-p PORT] [-u USER] [-d REMOTEDIR] [--debug] [--cachetimeout CACHETIMEOUT] host mountpoint
 
     To unmount use: fusermount -u mountpoint
 
@@ -53,14 +49,14 @@ Usage:
 Example:
 
     ```sh
-    ./cachefs.py localhost ~/mnt
+    ./sshfs-offline.py localhost ~/mnt
     ```
 
 Note, that it's recommended to run it as user, not as root.  For this
 to work the mountpoint must be owned by the user.  If the username is
 different on the host you are connecting to, then use the --user option.
 
-If you need to enter a password cachefs will ask for it. 
+If you need to enter a password sshfs-offline will ask for it. 
 You can also specify a remote directory using --remotedir.  The default
 is your home directory.
 
@@ -73,10 +69,10 @@ To unmount the filesystem:
 Cache Implementation
 ====================
 
-The data and metadata are cached in the **.cachefs** directory.  In this example, the **test/myfile.txt** file has two 132K blocks.  The data is cached in the **data** sub-directory, and the metadata is cached in the **metadata** sub-directory.
+The data and metadata are cached in the **.sshfs-offline** directory.  In this example, the **test/myfile.txt** file has two 132K blocks.  The data is cached in the **data** sub-directory, and the metadata is cached in the **metadata** sub-directory.
 
 ```sh
-➜  .cachefs
+➜  .sshfs-offline
 ├── data
 │   └── localhost   # host name
 │       └── home
