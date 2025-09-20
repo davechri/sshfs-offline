@@ -71,7 +71,7 @@ class SftpOffline:
 
 class SFTPManager:
     def __init__(self, host, user, remotedir, port):
-        self.log = getLogger('sftp')
+        self.log = getLogger('sftp    ')
         self.host = host
         self.user = user 
         self.password = None      

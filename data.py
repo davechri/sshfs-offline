@@ -5,6 +5,8 @@ from pathlib import Path
 import os
 
 from logging import getLogger
+import queue
+import threading
 import time
 
 import sftp
@@ -25,12 +27,16 @@ class Data:
     BLOCK_SIZE = sftp.BLOCK_SIZE  
  
     def __init__(self, host: str, basedir: str):
-        self.log = getLogger('data')
+        self.log = getLogger('data    ')
             
         # make data cache directory ~/.sshfs-offline/data
         self.dataDir = os.path.join(Data.DATA_DIR, host, os.path.splitroot(basedir)[-1])
         if not os.path.exists(self.dataDir):
-            os.makedirs(self.dataDir)         
+            os.makedirs(self.dataDir) 
+
+        self.fileReaderQueue = queue.Queue()
+
+        threading.Thread(target=self.fileReaderThread).start()        
      
     def _dataPath(self, path: str) -> str:
         #p = path.replace('/','%').replace('\\', '%')
@@ -39,29 +45,25 @@ class Data:
     def statvfs(self, path: str):
         self.log.debug('statvfs: %s', path)              
         dataPath = self._dataPath(path)
-        dir = os.path.dirname(dataPath)
-        if os.path.exists(dir):
-            for entry in os.listdir(dir):
-                if entry.startswith(os.path.basename(path)+'-block'):
-                    entryPath = os.path.join(dir, entry)
-                    return os.statvfs(entryPath)  
-        
-    def removeStaleBlocks(self, path, mtime: float=None ): 
-        self.log.debug('removeStaleBlocks: %s', path)    
+       
+        if os.path.exists(dataPath):
+            return os.statvfs(dataPath) 
+                    
+    def deleteStaleFile(self, path, mtime: float=None ): 
+        self.log.debug('deleteStaleFile: %s', path)    
         if not sftp.manager.isConnected():
             return
-        dataPath = self._dataPath(path)
-        dir = os.path.dirname(dataPath)
-        if os.path.exists(dir):
-            for entry in os.listdir(dir):
-                entryPath = os.path.join(dir, entry)                
-                if entry.startswith(os.path.basename(path)+'-block') and \
-                    (mtime == None or os.lstat(entryPath).st_ctime < mtime):
-                    self.log.debug('removeStaleBlocks: delete block %s %s', path, entry) 
-                    os.unlink(entryPath)
+        
+        dataPath = self._dataPath(path)        
+     
+        if os.path.exists(dataPath) and os.path.isfile(path):                               
+            if (mtime == None or os.lstat(dataPath).st_ctime < mtime):
+                self.log.debug('deleteStaleFile: deleting %s', path) 
+                os.unlink(dataPath)  
+                metadata.cache.deleteMetadata(path, [metadata.Metadata.BLOCKMAP])             
 
     def read(self, path, size, offset, fh):  
-        self.log.debug('read: %s input: size=%d offset=%d fd=%d', path, size, offset, fh)
+        #self.log.debug('read: %s input: size=%d offset=%d fd=%d', path, size, offset, fh)
 
         buf = bytearray()
 
@@ -69,46 +71,92 @@ class Data:
         d = os.path.dirname(dataPath)
         if not os.path.exists(d):
             os.makedirs(d)
+        if not os.path.exists(dataPath):
+            with open(dataPath, 'wb') as file:
+                fileSize = 0
+                st = metadata.cache.getattr(path)
+                if st != None:
+                    fileSize = st['st_size']
+                else:
+                    fileSize = sftp.manager.sftp().lstat(fixPath(path)).st_size
+                file.truncate(fileSize)       
 
-        i = 0
-        blockSlice = range(math.floor(offset / Data.BLOCK_SIZE) , math.floor((offset + size) / Data.BLOCK_SIZE)+1)
-        for blockNum in blockSlice:  
-            dataBlockPath = '{}-block{}'.format(dataPath, blockNum)           
-            if os.path.exists(dataBlockPath):                
-                self.log.debug('read: %s cached block: %d', path, blockNum)                 
-                with open(dataBlockPath, 'rb') as file:
-                    if len(buf) == 0:
-                        file.seek(offset%Data.BLOCK_SIZE)                        
-                        buf = file.read(size)                    
-                    else:
-                        buf += file.read(min(Data.BLOCK_SIZE, size-len(buf)))
-            else: 
-                self.log.debug('read: %s read remote block: %d', path, blockNum) 
-                if i%2 == 0:
-                    with sftp.manager.sftp().open(fixPath(path), 'rb') as file:                        
-                        file.seek(blockNum*Data.BLOCK_SIZE)
+        blockMap = metadata.cache.blockmap(path)
+        blockNumSlice = range(math.floor(offset / Data.BLOCK_SIZE) , min(math.ceil((offset + size) / Data.BLOCK_SIZE), len(blockMap))) 
+              
+        try:
+            if not 1 in blockMap[blockNumSlice[0]:blockNumSlice[-1]+1]:            
+                with sftp.manager.sftp().open(fixPath(path), 'rb') as file:
+                    file.seek(blockNumSlice[0]*Data.BLOCK_SIZE)
+                    tempBuf = file.read(len(blockNumSlice)*Data.BLOCK_SIZE)
 
-                        # use prefetch, if 2 blocks are needed
-                        stop = 2 
-                        if i+1 == len(blockSlice):                            
-                            stop = 1
-                        else:
-                            file.prefetch(2*Data.BLOCK_SIZE)
+                with open(dataPath, 'rb+') as file:
+                    file.seek(blockNumSlice[0]*Data.BLOCK_SIZE)
+                    file.write(tempBuf)
 
-                        for j in range(0,stop):
+                for blockNum in blockNumSlice:
+                    blockMap[blockNum] = 1
+                metadata.cache.blockmap_save(path, blockMap)
+
+                blockOffset = offset%Data.BLOCK_SIZE
+                buf = tempBuf[blockOffset:min(len(tempBuf), blockOffset+size)]
+
+                # More unread blocks?
+                if 0 in blockMap:
+                    self.fileReaderQueue.put(path)
+            else:                     
+                for blockNum in blockNumSlice:
+                    if blockMap[blockNum] == 0:
+                        #self.log.debug('read: %s get block %d from remote', path, blockNum)
+                        with sftp.manager.sftp().open(fixPath(path), 'rb') as file:                                       
+                            file.seek(blockNum*Data.BLOCK_SIZE)
                             block = file.read(Data.BLOCK_SIZE) 
-                            if len(buf) == 0:                               
-                                buf = block[offset%Data.BLOCK_SIZE : min(Data.BLOCK_SIZE, size)]
-                            else:
-                                buf += block[0 : min(Data.BLOCK_SIZE, size-len(buf))]
-                            
-                            with open(dataBlockPath, 'wb') as file:
-                                file.write(block) 
-                            
-                            dataBlockPath = '{}-block{}'.format(dataPath, blockNum+1)               
+                                                
+                        with open(dataPath, 'rb+') as file:
+                            file.seek(blockNum*Data.BLOCK_SIZE)
+                            file.write(block) 
 
-            i += 1
-            
-        return bytes(buf)        
+                        blockMap[blockNum] = 1
+                        metadata.cache.blockmap_save(path, blockMap)
+
+                        if len(buf) == 0:
+                            blockOffset = offset%Data.BLOCK_SIZE                            
+                            buf = block[blockOffset : min(Data.BLOCK_SIZE, blockOffset+size)]
+                        else:
+                            buf += block[0 : min(Data.BLOCK_SIZE, size-len(buf))]                   
+                    else:
+                        with open(dataPath, 'rb') as file:
+                            if len(buf) == 0:
+                                file.seek(offset)                        
+                                buf = file.read(min(size, Data.BLOCK_SIZE-offset%Data.BLOCK_SIZE))                    
+                            else:
+                                file.seek(blockNum*Data.BLOCK_SIZE)    
+                                buf += file.read(min(Data.BLOCK_SIZE, size-len(buf)))
+        except Exception as e:
+            self.log.error('read: %s size=%d offset=%d', path, size, offset)
+            self.log.error('read: %s blockMap=%s', path, blockMap)
+            self.log.error('read: %s blockMap=%s', path, blockNumSlice)
+            raise e
+       
+        #self.log.debug('read: %s %d', path,= len(buf))
+        return bytes(buf)  
+
+    def fileReaderThread(self):
+        while True:
+            path = self.fileReaderQueue.get()
+            self.log.debug('-> fileReaderThread %s', path)
+            blockMap = metadata.cache.blockmap(path)  
+            unreadBlockFound = False          
+            for i in range(0, len(blockMap)):
+                if blockMap[i] == 0: 
+                    size = Data.BLOCK_SIZE
+                    offset = i * Data.BLOCK_SIZE
+                    self.log.debug('<- fileReaderThread %s size=%s offset=%s', path, size, offset)
+                    self.read(path, size, offset, 0) 
+                    unreadBlockFound = True
+                    break
+
+            if not unreadBlockFound:
+                self.log.debug('<- fileReaderThread %s all blocks read', path)
 
 cache: Data = None
