@@ -78,8 +78,7 @@ The data and metadata are cached in the **.sshfs-offline** directory.  In this e
 │       └── home
 │           └── dave
 │               └── test
-│                   ├── myfile.txt-block0  # block 0 of test/myfile.txt
-│                   └── myfile.txt-block1  # block 1 of test/myfile.txt
+│                   └── myfile.txt 
 └── metadata
     └── localhost   # host name
         └── home
@@ -87,8 +86,8 @@ The data and metadata are cached in the **.sshfs-offline** directory.  In this e
                 ├── %test        # test direcotry
                 │   ├── getattr  # lstat status for directory
                 │   └── readdir  # directory entries
-                ├── %test%myfile.txt  # test/myfile.txt file
-                    └── getattr       # lstat status for file                
-
+                └── %test%myfile.txt  # test/myfile.txt file
+                    ├── blockmap      # track blocks that are cached
+                    └── getattr       # lstat status for file 
 ```
 
