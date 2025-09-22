@@ -1,8 +1,8 @@
 
-import errno
 import math
 from pathlib import Path
 import os
+import log
 
 import json
 from logging import getLogger
@@ -13,10 +13,10 @@ import time
 from errno import ENOENT
 
 import data
+import metrics
 import sftp
 
 from fuse import FuseOSError
-
 
 class Metadata:
     '''
@@ -29,7 +29,7 @@ class Metadata:
     BLOCKMAP = 'blockmap'
     
     def __init__(self, host: str, basedir: str, cachetimeout: float):
-        self.log = getLogger('metadata')
+        self.log = getLogger(log.METADATA)
 
         self.cachetimeout = cachetimeout
         
@@ -46,6 +46,7 @@ class Metadata:
             for file in files:
                 filePath = os.path.join(mdPath, file)
                 if os.path.exists(filePath):
+                    metrics.counts.incr('deleteMetadata')
                     os.unlink(filePath)
         
     def deleteParentMetadata(self, path):
@@ -67,7 +68,7 @@ class Metadata:
             data.cache.deleteStaleFile(path, dic['st_mtime']) 
             self._storeCache(path, Metadata.GETATTR, dic)
        
-    def readdir(self, path)-> list[str]:
+    def readdir(self, path)-> list[str]:       
         return self._readCache(path, Metadata.READDIR)
         
     def readdir_save(self, path, s: list[str]=None):
@@ -81,10 +82,11 @@ class Metadata:
     
     def blockmap(self, path:str) -> bytearray | None:                   
         bm = self._readCache(path, Metadata.BLOCKMAP)
+        metrics.counts.incr('blockmap')
         # not sure how the blockMap can be zero length?
         if bm != None and len(bm) == 0:
             bm = None
-            self.log.error('blockmap %s ignore zero length blockMap', path)
+            self.log.warning('blockmap: %s zero length blockMap?', path)
 
         if bm == None:
             fileSize = 0
@@ -99,6 +101,7 @@ class Metadata:
         return bm    
     
     def blockmap_save(self, path:str, blockMap: bytearray):
+        metrics.counts.incr('blockmap_save')
         self._storeCache(path, Metadata.BLOCKMAP, blockMap)        
     
     # 
@@ -138,11 +141,13 @@ class Metadata:
                 with open(metadataPath, 'rb') as file:
                     buf = file.read()
                     self.log.debug('_readCache.%s: %s %s', operation, path, str(buf))   
+                    metrics.counts.incr('blockmap_hit')
                     return bytearray(buf)
             else:
                 if time.time() > os.lstat(metadataPath).st_ctime + self.cachetimeout:
                     self.log.debug('_readCache.%s: expired %s', operation, path)
                     os.unlink(metadataPath)
+                    metrics.counts.incr(operation+'_expired')    
                     return None
                 else:                
                     with open(metadataPath, 'r') as file:                    
@@ -150,7 +155,8 @@ class Metadata:
                         logMd = ''  
                         if operation != Metadata.READDIR:
                             logMd = d
-                        self.log.debug('_readCache.%s: %s %s', operation, path, logMd)                               
+                        self.log.debug('_readCache.%s: %s %s', operation, path, logMd)  
+                        metrics.counts.incr(operation+'_hit')                             
                         return d
                     
         self.log.debug('readCache.%s: not found %s', operation, path)

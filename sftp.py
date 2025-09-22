@@ -12,6 +12,9 @@ import socket
 
 from fuse import FuseOSError
 
+import metrics
+import log
+
 BLOCK_SIZE = 131072
 WINDOW_SIZE = 1073741824 
 
@@ -71,7 +74,7 @@ class SftpOffline:
 
 class SFTPManager:
     def __init__(self, host, user, remotedir, port):
-        self.log = getLogger('sftp    ')
+        self.log = getLogger(log.SFTP)
         self.host = host
         self.user = user 
         self.password = None      
@@ -95,6 +98,7 @@ class SFTPManager:
             except socket.gaierror:
                 self.log.debug('sftp: Cannot connect to host '+self.host)
                 print('Cannot connect to host ' + self.host + '.   Only cached data will be available.')
+                metrics.counts.incr('connectFailed') 
                 return SftpOffline()
             except paramiko.ssh_exception.AuthenticationException:
                 self.password = getpass.getpass("Enter password: ")
@@ -103,6 +107,7 @@ class SFTPManager:
                 except paramiko.ssh_exception.AuthenticationException:
                     self.log.debug("sftp: Authentication failed")
                     print('Invalid user or password')
+                    metrics.counts.incr('authentication') 
                     exit(1)
             
             sshClient.get_transport().default_window_size = WINDOW_SIZE
@@ -113,6 +118,7 @@ class SFTPManager:
             except IOError:
                 self.log.debug('--remotedir '+self.remotedir+' not found on host '+self.host)
                 print('--remotedir '+self.remotedir+' not found on host '+self.host)
+                metrics.counts.incr('remotedirErr') 
                 exit(1)
                         
                            
