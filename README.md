@@ -91,3 +91,9 @@ The data and metadata are cached in the **.sshfs-offline** directory.  In this e
                     └── getattr       # lstat status for file 
 ```
 
+Debugging
+=========
+
+* Metrics are logged to the **~/.sshfs-offline/metrics.log** file.
+* In production  (--debug=False), the log level is set to **warning**, and logs are writtend to the **~/.sshfs-offline/error.log** file.
+* If the --debug option is specified, the log level is set to **debug**, the process is run in the foreground, and logs are written to stdout.

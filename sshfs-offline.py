@@ -8,6 +8,7 @@ from pathlib import Path
 import getpass
 import sys
 
+import metrics
 import sftp
 from sftp import fixPath
 
@@ -15,6 +16,7 @@ from fuse import FUSE, FuseOSError, Operations
 
 import data
 import metadata
+import log
 
 class Main(Operations):
     '''
@@ -32,164 +34,268 @@ class Main(Operations):
         remotedir = args.remotedir
         port = args.port
                
-        self.log = getLogger('main    ')
+        self.log = getLogger(log.MAIN)
         
-        main = self
+        metrics.counts = metrics.Metrics()
         sftp.manager = sftp.SFTPManager(host, user, remotedir, port) 
         metadata.cache = metadata.Metadata(host, remotedir, args.cachetimeout)
         data.cache = data.Data(host, remotedir)
 
         sftp.manager.sftp() # verify connection to host
          
-    def chmod(self, path, mode):  
-        self.log.debug('-> chmod: %s %s', path, mode)        
-        metadata.cache.deleteMetadata(path)
-        sftp.manager.sftp().chmod(fixPath(path), mode)
-        self.log.debug('<- chmod: %s', path) 
+    def chmod(self, path, mode): 
+        try: 
+            self.log.debug('-> chmod: %s %s', path, mode)   
+            metrics.counts.incr('chmod')     
+            metadata.cache.deleteMetadata(path)
+            sftp.manager.sftp().chmod(fixPath(path), mode)
+            self.log.debug('<- chmod: %s', path) 
+        except Exception as e:
+            self.log.error('<- chmod: %s %s', path, mode) 
+            metrics.counts.incr('chmod_except') 
+            raise e
 
     def chown(self, path, uid, gid):
-        self.log.debug('-> chown: %s %s %s', path, uid, gid)  
-        metadata.cache.deleteMetadata(path)
-        sftp.manager.sftp().chown(fixPath(path), uid, gid)  
-        self.log.debug('<- chown: %s', path)   
-    
+        try:
+            self.log.debug('-> chown: %s %s %s', path, uid, gid) 
+            metrics.counts.incr('chown') 
+            metadata.cache.deleteMetadata(path)
+            sftp.manager.sftp().chown(fixPath(path), uid, gid)  
+            self.log.debug('<- chown: %s', path)  
+        except Exception as e:
+            self.log.error('<- chown: %s %s %s', path, uid, gid) 
+            metrics.counts.incr('chown_except') 
+            raise e
+        
     def create(self, path, mode):  
-        self.log.debug('-> create: %s %s', path, mode)       
-        metadata.cache.deleteMetadata(path)
-        metadata.cache.deleteParentMetadata(path)
-        f = sftp.manager.sftp().open(fixPath(path), 'w')
-        f.chmod(mode)
-        f.close()
-        self.log.debug('<- create: %s', path) 
-        return 0
+        try:
+            self.log.debug('-> create: %s %s', path, mode)  
+            metrics.counts.incr('create')     
+            metadata.cache.deleteMetadata(path)
+            metadata.cache.deleteParentMetadata(path)
+            f = sftp.manager.sftp().open(fixPath(path), 'w')
+            f.chmod(mode)
+            f.close()
+            self.log.debug('<- create: %s', path) 
+            return 0
+        except Exception as e:
+            self.log.error('<- create: %s %s', path, mode) 
+            metrics.counts.incr('create_except')  
+            raise e
 
     def destroy(self, path):  
-        self.log.debug('-> destroy: %s', path)       
-        sftp.manager.sftp().close()        
-        self.log.debug('<- destroy: %s', path) 
+        try:
+            self.log.debug('-> destroy: %s', path)  
+            metrics.counts.incr('destroy')     
+            sftp.manager.sftp().close()        
+            self.log.debug('<- destroy: %s', path) 
+        except Exception as e:
+            self.log.error('<- destroy: %s', path)  
+            metrics.counts.incr('destroy_except') 
+            raise e
+        finally:
+            metrics.counts.stop()
 
     def getattr(self, path, fh=None):
-        self.log.debug('-> getattr: %s', path)
-        d = metadata.cache.getattr(path)
-        if d != None:
-            if d == {}:
-                raise FuseOSError(errno.ENOENT)
-            else:
-                self.log.debug('<- getattr: %s', path)
-                return d # cache hit
-        
         try:
-            st = sftp.manager.sftp().lstat(fixPath(path))            
-        except IOError as e: 
-            metadata.cache.getattr_save(path, {}) # negative cache entry          
-            raise FuseOSError(errno.ENOENT)
+            self.log.debug('-> getattr: %s', path)
+            metrics.counts.incr('getattr')
+            d = metadata.cache.getattr(path)
+            if d != None:
+                if d == {}:
+                    raise FuseOSError(errno.ENOENT)
+                else:
+                    self.log.debug('<- getattr: %s', path)
+                    return d # cache hit
+            
+            try:
+                st = sftp.manager.sftp().lstat(fixPath(path))            
+            except IOError as e: 
+                metadata.cache.getattr_save(path, {}) # negative cache entry          
+                raise FuseOSError(errno.ENOENT)
 
-        d = dict((key, getattr(st, key)) for key in (
-            'st_atime', 'st_gid', 'st_mode', 'st_mtime', 'st_size', 'st_uid'))
-        metadata.cache.getattr_save(path, d)
-        self.log.debug('<- getattr: %s %s', path, d)
-        return d
-    
+            d = dict((key, getattr(st, key)) for key in (
+                'st_atime', 'st_gid', 'st_mode', 'st_mtime', 'st_size', 'st_uid'))
+            metadata.cache.getattr_save(path, d)
+            self.log.debug('<- getattr: %s %s', path, d)
+            return d
+        except Exception as e:
+            if not isinstance(e,  OSError) and OSError(e).errno != errno.ENOENT:                
+                self.log.error('<- getattr: %s %s', path, e)
+                metrics.counts.incr('getattr_except') 
+            raise e
+        
     def statfs(self, path): 
-        self.log.debug('-> statfs: %s', path)       
-        stv = data.cache.statvfs(path)        
-        dic = dict((key, getattr(stv, key)) for key in ('f_bavail', 'f_bfree',
-            'f_blocks', 'f_bsize', 'f_favail', 'f_ffree', 'f_files', 'f_flag',
-            'f_frsize', 'f_namemax'))
-        self.log.debug('<- statfs: %s %s', path, dic)  
-        return dic
+        try:
+            self.log.debug('-> statfs: %s', path) 
+            metrics.counts.incr('statfs')      
+            stv = data.cache.statvfs(path)        
+            dic = dict((key, getattr(stv, key)) for key in ('f_bavail', 'f_bfree',
+                'f_blocks', 'f_bsize', 'f_favail', 'f_ffree', 'f_files', 'f_flag',
+                'f_frsize', 'f_namemax'))
+            self.log.debug('<- statfs: %s %s', path, dic)  
+            return dic
+        except Exception as e:
+            self.log.error('<- statfs: %s', path) 
+            metrics.counts.incr('statfs_except')       
+            raise e
 
-    def mkdir(self, path, mode):  
-        self.log.debug('-> mkdir: %s %s', path, mode)       
-        metadata.cache.deleteMetadata(path)
-        metadata.cache.deleteParentMetadata(path)
-        sftp.manager.sftp().mkdir(fixPath(path), mode)
-        self.log.debug('<- mkdir: %s', path)
+    def mkdir(self, path, mode): 
+        try: 
+            self.log.debug('-> mkdir: %s %s', path, mode) 
+            metrics.counts.incr('mkdir')      
+            metadata.cache.deleteMetadata(path)
+            metadata.cache.deleteParentMetadata(path)
+            sftp.manager.sftp().mkdir(fixPath(path), mode)
+            self.log.debug('<- mkdir: %s', path)
+        except Exception as e:
+            self.log.error('<- mkdir: %s %s', path, mode) 
+            metrics.counts.incr('mkdir_except')  
+            raise e
 
     def read(self, path, size, offset, fh):  
-        self.log.debug('-> read: %s size=%d offset=%d', path, size, offset)
+        try:
+            self.log.debug('-> read: %s size=%d offset=%d', path, size, offset)
+            metrics.counts.incr('read')
 
-        buf = data.cache.read(path, size, offset, fh)
+            buf = data.cache.read(path, size, offset, fh)
 
-        self.log.debug('<- read: %s %d', path, len(buf))
-        return buf
-
+            self.log.debug('<- read: %s %d', path, len(buf))
+            return buf
+        except Exception as e:
+            self.log.error('<- read: %s %s', path, mode) 
+            metrics.counts.incr('read_except') 
+            raise e
         
     def readdir(self, path, fh):
-        self.log.debug('-> readdir: %s', path)
-        s = metadata.cache.readdir(path)
-        if s != None:
+        try:
+            self.log.debug('-> readdir: %s', path)
+            metrics.counts.incr('readdir')
+            s = metadata.cache.readdir(path)
+            if s != None:
+                self.log.debug('<- readdir: %s %d', path, len(s))
+                return s
+            s = ['.', '..'] + [name
+                                for name in sftp.manager.sftp().listdir(fixPath(path))]
+            metadata.cache.readdir_save(path, s)        
+            s = metadata.cache.readdir(path)
             self.log.debug('<- readdir: %s %d', path, len(s))
             return s
-        s = ['.', '..'] + [name
-                              for name in sftp.manager.sftp().listdir(fixPath(path))]
-        metadata.cache.readdir_save(path, s)        
-        s = metadata.cache.readdir(path)
-        self.log.debug('<- readdir: %s %d', path, len(s))
-        return s
+        except Exception as e:
+            self.log.error('<- readdir: %s', path)
+            metrics.counts.incr('readdir_except') 
+            raise e
 
     def readlink(self, path):
-        self.log.debug('-> readlink: %s', path)
-        link = metadata.cache.readlink(path)
-        if link == None:        
-            link = sftp.manager.sftp().readlink(fixPath(path))
-            metadata.cache.readlink_save(path, link)
-        
-        self.log.debug('<- readlink: %s %s', path, link)
-        return link
+        try:
+            self.log.debug('-> readlink: %s', path)
+            metrics.counts.incr('readlink')
+            link = metadata.cache.readlink(path)
+            if link == None:        
+                link = sftp.manager.sftp().readlink(fixPath(path))
+                metadata.cache.readlink_save(path, link)
+            
+            self.log.debug('<- readlink: %s %s', path, link)
+            return link
+        except Exception as e:
+            self.log.error('<- readlink: %s', path)
+            metrics.counts.incr('readlink_except') 
+            raise e
 
     def rename(self, old, new):
-        self.log.debug('-> rename: %s %s', old, new)        
-        metadata.cache.deleteMetadata(old)
-        sftp.manager.sftp().rename(fixPath(old), fixPath(new))
-        self.log.debug('<- rename: %s %s', old, new)
+        try:
+            self.log.debug('-> rename: %s %s', old, new) 
+            metrics.counts.incr('rename')       
+            metadata.cache.deleteMetadata(old)
+            sftp.manager.sftp().rename(fixPath(old), fixPath(new))
+            self.log.debug('<- rename: %s %s', old, new)
+        except Exception as e:
+            self.log.error('<- rename: %s %s', old, new) 
+            metrics.counts.incr('rename_except')   
+            raise e
 
     def rmdir(self, path):  
-        self.log.debug('-> rmdir: %s', path)     
-        metadata.cache.deleteMetadata(path)
-        metadata.cache.deleteParentMetadata(path)
-        sftp.manager.sftp().rmdir(fixPath(path))
-        self.log.debug('<- rmdir: %s', path)    
+        try:
+            self.log.debug('-> rmdir: %s', path)   
+            metrics.counts.incr('rmdir')  
+            metadata.cache.deleteMetadata(path)
+            metadata.cache.deleteParentMetadata(path)
+            sftp.manager.sftp().rmdir(fixPath(path))
+            self.log.debug('<- rmdir: %s', path)    
+        except Exception as e:
+            self.log.error('<- rmdir: %s', path)  
+            metrics.counts.incr('rmdir_except') 
+            raise e
 
     def symlink(self, target, source): 
-        self.log.debug('-> symlink: %s %s', target, source)           
-        sftp.manager.sftp().symlink(fixPath(source), fixPath(target))
-        self.log.debug('<- symlink: %s %s', target, source)     
+        try:
+            self.log.debug('-> symlink: %s %s', target, source)   
+            metrics.counts.incr('symlink')        
+            sftp.manager.sftp().symlink(fixPath(source), fixPath(target))
+            self.log.debug('<- symlink: %s %s', target, source)     
+        except Exception as e:
+            self.log.error('<- symlink: %s %s', target, source) 
+            metrics.counts.incr('symlink_except')   
+            raise e
 
     def truncate(self, path, length, fh=None):  
-        self.log.debug('-> truncate: %s %d', path, length)           
-        metadata.cache.deleteMetadata(path)
-        data.cache.deleteStaleFile(path)
-        sftp.manager.sftp().truncate(fixPath(path), length)
-        self.log.debug('<- truncate: %s', path)     
+        try:
+            self.log.debug('-> truncate: %s %d', path, length)  
+            metrics.counts.incr('truncate')         
+            metadata.cache.deleteMetadata(path)
+            data.cache.deleteStaleFile(path)
+            sftp.manager.sftp().truncate(fixPath(path), length)
+            self.log.debug('<- truncate: %s', path)   
+        except Exception as e:
+            self.log.error('<- truncate: %s %d', path, length)  
+            metrics.counts.incr('truncate_except') 
+            raise e  
 
-    def unlink(self, path):   
-        self.log.debug('-> unlink: %s', path)         
-        metadata.cache.deleteMetadata(path)
-        metadata.cache.deleteParentMetadata(path)
-        data.cache.deleteStaleFile(path)
-        sftp.manager.sftp().unlink(fixPath(path))
-        self.log.debug('<- unlink: %s', path)    
+    def unlink(self, path):  
+        try: 
+            self.log.debug('-> unlink: %s', path)    
+            metrics.counts.incr('unlink')     
+            metadata.cache.deleteMetadata(path)
+            metadata.cache.deleteParentMetadata(path)
+            data.cache.deleteStaleFile(path)
+            sftp.manager.sftp().unlink(fixPath(path))
+            self.log.debug('<- unlink: %s', path)    
+        except Exception as e:
+            self.log.error('<- unlink: %s', path)   
+            metrics.counts.incr('unlink_except') 
+            raise e
 
     def utimens(self, path, times=None):
-        self.log.debug('-> utimens: %s', path)    
-        metadata.cache.deleteMetadata(path)
-        data.cache.deleteStaleFile(path)
-        sftp.manager.sftp().utime(fixPath(path), times)
-        self.log.debug('<- utimens: %s', path)    
+        try:
+            self.log.debug('-> utimens: %s', path) 
+            metrics.counts.incr('utimens')   
+            metadata.cache.deleteMetadata(path)
+            data.cache.deleteStaleFile(path)
+            sftp.manager.sftp().utime(fixPath(path), times)
+            self.log.debug('<- utimens: %s', path)   
+        except Exception as e:
+            self.log.error('<- utimens: %s', path) 
+            metrics.counts.incr('utimens_except') 
+            raise e 
 
-    def write(self, path, buf, offset, fh):        
-        self.log.debug('-> write: %s %d', path, offset)
-        metadata.cache.deleteMetadata(path)  
-        data.cache.removeStaleBlocks(path)
-        #self.log.debug('write: write to remote file %s %d', path, offset)
-        with sftp.manager.sftp().open(fixPath(path), 'r+') as file:
-            file.seek(offset, 0)
-            file.write(buf)
-            file.close()
-        self.log.debug('<- write: %s %d', path, len(buf))
-        return len(buf)
-        
+    def write(self, path, buf, offset, fh): 
+        try:       
+            self.log.debug('-> write: %s %d', path, offset)
+            metrics.counts.incr('write')
+            metadata.cache.deleteMetadata(path)  
+            data.cache.removeStaleBlocks(path)
+            #self.log.debug('write: write to remote file %s %d', path, offset)
+            with sftp.manager.sftp().open(fixPath(path), 'r+') as file:
+                file.seek(offset, 0)
+                file.write(buf)
+                file.close()
+            self.log.debug('<- write: %s %d', path, len(buf))
+            return len(buf)
+        except Exception as e:
+            self.log.error('<- write: %s %d', path, offset)
+            metrics.counts.incr('write_except') 
+            raise e           
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()  
@@ -202,31 +308,11 @@ if __name__ == '__main__':
     parser.add_argument('--debug', help='run in debug mode', action='store_true')
     parser.add_argument('--cachetimeout', type=int, help='duration in seconds to keep metadata cached (default is 5 minutes)', default=Main.CACHE_TIMEOUT)
 
-    args = parser.parse_args()
+    args = parser.parse_args()   
 
-    dir = os.path.join(Path.home(), '.sshfs-offline')
-    if not os.path.exists(dir):
-        os.makedirs(dir)
-
-    import logging
-    level = logging.WARNING
-    logFileName = None
-    if args.debug:
-        level = logging.DEBUG
-        logging.getLogger("fuse").setLevel(logging.WARNING)    
-        logging.getLogger("paramiko").setLevel(logging.WARNING)
-    else:
-        logFileName = os.path.join(dir, 'log.txt')
-
-        
-    logging.basicConfig(
-        format='%(asctime)s:%(levelname)s:%(name)s %(message)s',
-        datefmt='%H:%M:%S',
-        level=level,
-        filename=logFileName
-    )     
-
-    main = Main(args)
+    log.Log().setupConfig(args)            
+    
+    main = Main(args)    
 
     #print(args.host, args.login)
     #exit()

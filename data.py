@@ -1,14 +1,15 @@
 
-import errno
 import math
 from pathlib import Path
 import os
+import log
 
 from logging import getLogger
 import queue
 import threading
 import time
 
+import metrics
 import sftp
 from sftp import fixPath
 
@@ -27,7 +28,7 @@ class Data:
     BLOCK_SIZE = sftp.BLOCK_SIZE  
  
     def __init__(self, host: str, basedir: str):
-        self.log = getLogger('data    ')
+        self.log = getLogger(log.DATA)
             
         # make data cache directory ~/.sshfs-offline/data
         self.dataDir = os.path.join(Data.DATA_DIR, host, os.path.splitroot(basedir)[-1])
@@ -59,6 +60,7 @@ class Data:
         if os.path.exists(dataPath) and os.path.isfile(path):                               
             if (mtime == None or os.lstat(dataPath).st_ctime < mtime):
                 self.log.debug('deleteStaleFile: deleting %s', path) 
+                metrics.counts.incr('deleteStaleFile')
                 os.unlink(dataPath)  
                 metadata.cache.deleteMetadata(path, [metadata.Metadata.BLOCKMAP])             
 
@@ -94,7 +96,7 @@ class Data:
                     file.seek(blockNumSlice[0]*Data.BLOCK_SIZE)
                     file.write(tempBuf)
 
-                for blockNum in blockNumSlice:
+                for blockNum in blockNumSlice:                    
                     blockMap[blockNum] = 1
                 metadata.cache.blockmap_save(path, blockMap)
 
@@ -123,7 +125,7 @@ class Data:
                             blockOffset = offset%Data.BLOCK_SIZE                            
                             buf = block[blockOffset : min(Data.BLOCK_SIZE, blockOffset+size)]
                         else:
-                            buf += block[0 : min(Data.BLOCK_SIZE, size-len(buf))]                   
+                            buf += block[0 : min(Data.BLOCK_SIZE, size-len(buf))]
                     else:
                         with open(dataPath, 'rb') as file:
                             if len(buf) == 0:
@@ -131,8 +133,8 @@ class Data:
                                 buf = file.read(min(size, Data.BLOCK_SIZE-offset%Data.BLOCK_SIZE))                    
                             else:
                                 file.seek(blockNum*Data.BLOCK_SIZE)    
-                                buf += file.read(min(Data.BLOCK_SIZE, size-len(buf)))
-        except Exception as e:
+                                buf += file.read(min(Data.BLOCK_SIZE, size-len(buf)))                           
+        except Exception as e:            
             self.log.error('read: %s size=%d offset=%d', path, size, offset)
             self.log.error('read: %s blockMap=%s', path, blockMap)
             self.log.error('read: %s blockMap=%s', path, blockNumSlice)
@@ -153,10 +155,12 @@ class Data:
                     offset = i * Data.BLOCK_SIZE
                     self.log.debug('<- fileReaderThread %s size=%s offset=%s', path, size, offset)
                     self.read(path, size, offset, 0) 
-                    unreadBlockFound = True
+                    unreadBlockFound = True                    
                     break
 
-            if not unreadBlockFound:
+            if unreadBlockFound:
+                metrics.counts.incr('fileReaderThread')
+            else:
                 self.log.debug('<- fileReaderThread %s all blocks read', path)
 
 cache: Data = None
