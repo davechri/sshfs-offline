@@ -144,7 +144,7 @@ class Metadata:
                     metrics.counts.incr('blockmap_hit')
                     return bytearray(buf)
             else:
-                if time.time() > os.lstat(metadataPath).st_ctime + self.cachetimeout:
+                if time.time() > os.lstat(metadataPath).st_ctime + self.cachetimeout and sftp.manager.isConnected():            
                     self.log.debug('_readCache.%s: expired %s', operation, path)
                     os.unlink(metadataPath)
                     metrics.counts.incr(operation+'_expired')    

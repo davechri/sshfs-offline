@@ -97,3 +97,20 @@ Debugging
 * Metrics are logged to the **~/.sshfs-offline/metrics.log** file.
 * In production  (--debug=False), the log level is set to **warning**, and logs are writtend to the **~/.sshfs-offline/error.log** file.
 * If the --debug option is specified, the log level is set to **debug**, the process is run in the foreground, and logs are written to stdout.
+
+Using the tail command to follow the metrics:
+```sh
+$ tail -f ~/.sshfs-offline
+2025-09-23 07:26:19,237:INFO:metrics 
+   getattr         : 181
+   getattr_hit     : 181
+   init            : 1
+   readdir         : 26
+   readdir_hit     : 26
+   readlink        : 104
+   readlink_hit    : 104
+   sftp_chdir      : 1
+   sftp_connected  : 1
+   sftp_healthThread: 1
+   sftp_start      : 1
+```

@@ -28,7 +28,8 @@ class Main(Operations):
     HOME_DIR = str(Path.home())
     CACHE_TIMEOUT = 5 * 60
                         
-    def __init__(self, args):        
+    def __init__(self, args): 
+        self.debug = args.debug       
         host = args.host
         user = args.user
         remotedir = args.remotedir
@@ -42,6 +43,12 @@ class Main(Operations):
         data.cache = data.Data(host, remotedir)
 
         sftp.manager.sftp() # verify connection to host
+
+    def init(self, path):
+        metrics.counts.incr('init')
+        metrics.counts.start()
+        log.Log().setupConfig(self.debug)
+        sftp.manager.startKeepalive()        
          
     def chmod(self, path, mode): 
         try: 
@@ -76,12 +83,12 @@ class Main(Operations):
             f = sftp.manager.sftp().open(fixPath(path), 'w')
             f.chmod(mode)
             f.close()
-            self.log.debug('<- create: %s', path) 
+            self.log.debug('<- create: %s', path)             
             return 0
         except Exception as e:
             self.log.error('<- create: %s %s', path, mode) 
             metrics.counts.incr('create_except')  
-            raise e
+            raise e       
 
     def destroy(self, path):  
         try:
@@ -95,6 +102,7 @@ class Main(Operations):
             raise e
         finally:
             metrics.counts.stop()
+            sftp.manager.stop()
 
     def getattr(self, path, fh=None):
         try:
@@ -123,7 +131,7 @@ class Main(Operations):
             if not isinstance(e,  OSError) and OSError(e).errno != errno.ENOENT:                
                 self.log.error('<- getattr: %s %s', path, e)
                 metrics.counts.incr('getattr_except') 
-            raise e
+            raise e        
         
     def statfs(self, path): 
         try:
@@ -163,7 +171,7 @@ class Main(Operations):
             self.log.debug('<- read: %s %d', path, len(buf))
             return buf
         except Exception as e:
-            self.log.error('<- read: %s %s', path, mode) 
+            self.log.error('<- read: %s %s %d', path, size, offset) 
             metrics.counts.incr('read_except') 
             raise e
         
@@ -310,7 +318,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()   
 
-    log.Log().setupConfig(args)            
+    log.Log().setupConfig(debug=args.debug)            
     
     main = Main(args)    
 

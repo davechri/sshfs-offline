@@ -19,25 +19,26 @@ class Log:
             os.makedirs(self.logDir)
         self.formatter = logging.Formatter('%(asctime)s:%(levelname)s:%(name)s %(message)s')
 
-    def setupConfig(self, args):       
+    def setupConfig(self, debug: bool):    
 
-        level = logging.WARNING
-        
-        if args.debug:            
+        ## debug logging
+        if debug:            
             logging.getLogger(FUSE).setLevel(logging.WARNING)    
-            logging.getLogger(PARAMIKO).setLevel(logging.WARNING)
-            logging.getLogger(METRICS).setLevel(logging.CRITICAL)
+            logging.getLogger(PARAMIKO).setLevel(logging.WARNING)            
             logging.basicConfig(
                 format='%(asctime)s:%(levelname)s:%(name)s %(message)s',
                 datefmt='%H:%M:%S',
                 level=logging.DEBUG                                
-            )         
-        else:  
+            ) 
+                
+        # error logging 
+        for name in [MAIN, SFTP, METADATA, DATA, FUSE, PARAMIKO]:
+            logger = logging.getLogger(name)
             errorHandler = logging.FileHandler(os.path.join(self.logDir, 'error.log'), mode='w')
-            errorHandler.setFormatter(self.formatter)   
-            for name in [MAIN, SFTP, METADATA, DATA, FUSE, PARAMIKO]:
-                logger = logging.getLogger(name)
-                logger.addHandler(errorHandler)
+            errorHandler.setFormatter(self.formatter) 
+            errorHandler.setLevel(logging.ERROR)
+            logger.addHandler(errorHandler)
+            if not debug:
                 logger.setLevel(logging.ERROR)   
 
         # metrics logging
@@ -45,4 +46,4 @@ class Log:
         metricsHandler.setFormatter(self.formatter)             
         logger = logging.getLogger(METRICS)
         logger.addHandler(metricsHandler)
-        logger.setLevel(logging.INFO)
+        logger.setLevel(logging.DEBUG)        

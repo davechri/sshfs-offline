@@ -3,6 +3,7 @@ from logging import getLogger
 import logging
 import os
 from pathlib import Path
+import time
 from typing import Iterator
 import paramiko
 import threading
@@ -25,6 +26,7 @@ class Connection:
     def __init__(self, sshClient: paramiko.SSHClient, sftpClient: paramiko.SFTPClient):
         self.sshClient: paramiko.SSHClient  = sshClient
         self.sftpClient: paramiko.SFTPClient = sftpClient
+        self.offline = False
 
 class SftpOffline:
     def close(self) -> None:
@@ -81,24 +83,41 @@ class SFTPManager:
         self.remotedir = remotedir
         self.port = port 
         self.local = threading.local()
-        self.connections: dict[str, Connection] = dict()        
+        self.connections: dict[str, Connection] = dict() 
+        self.offline = False
+        self.keepaliveStarted = False   
+        self.keepaliveStopped = False  
 
     def isConnected(self):
-        return not isinstance(self.sftp(), SftpOffline)
+        return not isinstance(self.sftp(), SftpOffline) and not self.offline
 
     def sftp(self) -> paramiko.SFTPClient | SftpOffline:                    
         threadId = threading.get_native_id()
-        if (threadId not in self.connections or not
-            self.connections[threadId].sshClient.get_transport().is_active()):        
+        if self.offline:
+            if threadId in self.connections:
+                self.sftpClose()
+            return SftpOffline()
+        
+        if (threadId not in self.connections or 
+            not (self.connections[threadId].sshClient.get_transport().is_active() and
+                 self.connections[threadId].sshClient.get_transport().is_alive())):  
+            if threadId in self.connections:
+                self.sftpClose()      
             sshClient = paramiko.SSHClient()
             sshClient.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             sshClient.load_system_host_keys()            
             try:
                 sshClient.connect(self.host, port=self.port, username=self.user, password=self.password)
+               #sshClient.get_transport().set_keepalive(60)                
             except socket.gaierror:
                 self.log.debug('sftp: Cannot connect to host '+self.host)
                 print('Cannot connect to host ' + self.host + '.   Only cached data will be available.')
-                metrics.counts.incr('connectFailed') 
+                metrics.counts.incr('sftp_connect_err') 
+                return SftpOffline()
+            except OSError as e:
+                self.log.debug('sftp: %s', e)
+                print('{}.   Only cached data will be available.'.format(e))
+                metrics.counts.incr('sftp_network_err') 
                 return SftpOffline()
             except paramiko.ssh_exception.AuthenticationException:
                 self.password = getpass.getpass("Enter password: ")
@@ -107,27 +126,63 @@ class SFTPManager:
                 except paramiko.ssh_exception.AuthenticationException:
                     self.log.debug("sftp: Authentication failed")
                     print('Invalid user or password')
-                    metrics.counts.incr('authentication') 
+                    metrics.counts.incr('sftp_auth_err') 
                     exit(1)
             
+            metrics.counts.incr('sftp_connected') 
             sshClient.get_transport().default_window_size = WINDOW_SIZE
             self.connections[threadId] = Connection(sshClient, sshClient.open_sftp())
             self.connections[threadId].sftpClient.SFTP_FILE_OBJECT_BLOCK_SIZE = BLOCK_SIZE
             try:
                 self.connections[threadId].sftpClient.chdir(self.remotedir)
+                metrics.counts.incr('sftp_chdir') 
             except IOError:
                 self.log.debug('--remotedir '+self.remotedir+' not found on host '+self.host)
                 print('--remotedir '+self.remotedir+' not found on host '+self.host)
-                metrics.counts.incr('remotedirErr') 
+                metrics.counts.incr('sftp_chdir_err') 
                 exit(1)
                         
                            
         return self.connections[threadId].sftpClient    
     
     def sftpClose(self):
+        metrics.counts.incr('sftp_close')
         threadId = threading.get_native_id()
         val = self.connections.pop(threadId)
         val.sftpClient.close()
         val.sshClient.close() 
+
+    def startKeepalive(self):
+        if self.keepaliveStarted == False:
+            metrics.counts.incr('sftp_start')
+            self.keepaliveStarted = True
+            threading.Thread(target=self.keepaliveThread).start()
+
+    def keepaliveThread(self):        
+        metrics.counts.incr('sftp_keepaliveThread')
+        while True:
+            if self.keepaliveStopped:
+                metrics.counts.incr('sftp_stopped')
+                break
+            time.sleep(10)
+            sshClient = paramiko.SSHClient()
+            sshClient.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            sshClient.load_system_host_keys()            
+            try:
+                sshClient.connect(self.host, port=self.port, username=self.user, password=self.password)                              
+            except Exception as e:
+                if self.offline == False:
+                    self.offline = True
+                    metrics.counts.incr('sftp_offline')
+            else:                
+                if self.offline:
+                    metrics.counts.incr('sftp_online')
+                    self.offline = False                    
+                sshClient.close()
+
+    def stop(self):
+        self.log.info('sftp_stop')
+        metrics.counts.incr('sftp_stop')
+        self.keepaliveStopped = True
 
 manager: SFTPManager = None
