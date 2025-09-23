@@ -12,18 +12,16 @@ class Metrics:
        self.log = getLogger(log.METRICS)   
        self.counts: dict[str,int] = dict()
        self.prevCounts: dict[str, int] = dict()
-       self.started = False
        self.stopped = False
-       
-    def incr(self, name: str):
-        if not self.started:
-            self.started = True
-            threading.Thread(target=self.captureLoop).start()
 
+    def start(self):
+        threading.Thread(target=self.captureLoop).start()
+        
+    def incr(self, name: str): 
         if name in self.counts:
             self.counts[name] += 1
         else:
-            self.counts[name] = 1
+            self.counts[name] = 1                   
 
     def _logCounts(self):
         lines: list[str] = []
@@ -54,7 +52,7 @@ class Metrics:
             self.log.error('Exception: %s', e)
 
     def stop(self):
-        self.log.info('stop')
+        self.log.info('metrics_stop')
         self.stopped = True
 
 counts: Metrics
