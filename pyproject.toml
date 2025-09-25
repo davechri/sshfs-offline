@@ -3,12 +3,13 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.dynamic]
-dependencies = {file = ["requirements.txt", "requirements-swh.txt"]}
+dependencies = {file = ["requirements.txt"]}
 
 [project]
 name = "sshfs-offline"
-version = "0.0.1"
+version = "0.0.5"
 license = { text = "MIT" }
+dynamic = ["dependencies"]
 authors = [
     { name="Dave Christenson", email="davechri58@gmail.com" }
 ]
@@ -37,6 +38,10 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: PyPy",
   "License :: OSI Approved :: MIT License",  
 ]
+
+[project.urls]
+Repository = "https://github.com/davechri/sshfs-offline"
+Issues = "https://github.com/davechri/sshfs-offline/issues"
 
 [project.scripts]
 sshfs-offline = "sshfs_offline.cli:main"

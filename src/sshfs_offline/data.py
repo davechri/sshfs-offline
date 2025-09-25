@@ -2,20 +2,18 @@
 import math
 from pathlib import Path
 import os
-import log
+from sshfs_offline import log
 
 from logging import getLogger
 import queue
 import threading
-import time
 
-import metrics
-import sftp
-from sftp import fixPath
+from sshfs_offline import metrics
+from sshfs_offline import sftp
 
 from errno import ENOENT
 
-import metadata
+from sshfs_offline import metadata
 
 from fuse import FuseOSError
 
@@ -80,7 +78,7 @@ class Data:
                 if st != None:
                     fileSize = st['st_size']
                 else:
-                    fileSize = sftp.manager.sftp().lstat(fixPath(path)).st_size
+                    fileSize = sftp.manager.sftp().lstat(sftp.fixPath(path)).st_size
                 file.truncate(fileSize)       
 
         blockMap = metadata.cache.blockmap(path)
@@ -88,7 +86,7 @@ class Data:
               
         try:
             if not 1 in blockMap[blockNumSlice[0]:blockNumSlice[-1]+1]:            
-                with sftp.manager.sftp().open(fixPath(path), 'rb') as file:
+                with sftp.manager.sftp().open(sftp.fixPath(path), 'rb') as file:
                     file.seek(blockNumSlice[0]*Data.BLOCK_SIZE)
                     tempBuf = file.read(len(blockNumSlice)*Data.BLOCK_SIZE)
 
@@ -110,7 +108,7 @@ class Data:
                 for blockNum in blockNumSlice:
                     if blockMap[blockNum] == 0:
                         #self.log.debug('read: %s get block %d from remote', path, blockNum)
-                        with sftp.manager.sftp().open(fixPath(path), 'rb') as file:                                       
+                        with sftp.manager.sftp().open(sftp.fixPath(path), 'rb') as file:                                       
                             file.seek(blockNum*Data.BLOCK_SIZE)
                             block = file.read(Data.BLOCK_SIZE) 
                                                 

@@ -6,7 +6,6 @@ import os
 from pathlib import Path
 
 import getpass
-import sys
 
 from sshfs_offline import metrics
 from sshfs_offline import sftp
