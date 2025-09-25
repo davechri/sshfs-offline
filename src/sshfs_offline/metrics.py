@@ -4,7 +4,7 @@ import copy
 import logging
 import threading
 import time
-import log
+from sshfs_offline import log
 
 
 class Metrics:

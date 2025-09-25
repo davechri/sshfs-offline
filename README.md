@@ -122,15 +122,17 @@ Development
 Create Virtual Environment:
 
 ```sh
+$ cd sshfs-offline
 $ python3 -m venv my-venv-name
 $ source ~/my-venv-name/bin/activate
 $ pip install -r requirements.txt
+$ pip install -e .
 ```
 
 Mount filesystem:
 
 ```sh
-$ ./sshfs-offline/cli.py localhost ~/mnt
+$ ./src/sshfs_offline/cli.py localhost ~/mnt
 
 ```
 

@@ -13,8 +13,8 @@ import socket
 
 from fuse import FuseOSError
 
-import metrics
-import log
+from sshfs_offline import metrics
+from sshfs_offline import log
 
 BLOCK_SIZE = 131072
 WINDOW_SIZE = 1073741824 
