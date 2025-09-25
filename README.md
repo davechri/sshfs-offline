@@ -1,7 +1,7 @@
 sshfs-offline
 =============
 
-Python implementation of sshfs providing offline access to cached files.
+SSH File System with offline access to cached files.
 
 Features:
 
@@ -13,11 +13,12 @@ Features:
 
   - Read/Write file system
 
-Install Dependencies
-====================
+Install Script:
+===============
 
 ```sh
-pip install -r requirements.txt
+$ pip install sshfs-offline
+
 ```
 
 How to mount a filesystem
@@ -26,7 +27,7 @@ How to mount a filesystem
 Usage:
 
     ```sh
-    usage: sshfs-offline.py [-h] [-p PORT] [-u USER] [-d REMOTEDIR] [--debug] [--cachetimeout CACHETIMEOUT] host mountpoint
+    usage: sshfs-offline [-h] [-p PORT] [-u USER] [-d REMOTEDIR] [--debug] [--cachetimeout CACHETIMEOUT] host mountpoint
 
     To unmount use: fusermount -u mountpoint
 
@@ -49,7 +50,7 @@ Usage:
 Example:
 
     ```sh
-    ./sshfs-offline.py localhost ~/mnt
+    sshfs-offline localhost ~/mnt
     ```
 
 Note, that it's recommended to run it as user, not as root.  For this
@@ -114,3 +115,22 @@ $ tail -f ~/.sshfs-offline
    sftp_healthThread: 1
    sftp_start      : 1
 ```
+
+Development
+===========
+
+Create Virtual Environment:
+
+```sh
+$ python3 -m venv my-venv-name
+$ source ~/my-venv-name/bin/activate
+$ pip install -r requirements.txt
+```
+
+Mount filesystem:
+
+```sh
+$ ./sshfs-offline/cli.py localhost ~/mnt
+
+```
+
