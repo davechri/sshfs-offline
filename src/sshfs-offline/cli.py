@@ -304,7 +304,7 @@ class Main(Operations):
             metrics.counts.incr('write_except') 
             raise e           
 
-if __name__ == '__main__':
+def main():
     import argparse
     parser = argparse.ArgumentParser()  
     parser.description = 'To unmount use: fusermount -u mountpoint'
@@ -325,10 +325,16 @@ if __name__ == '__main__':
     #print(args.host, args.login)
     #exit()
     #breakpoint()
-    fuse = FUSE(
-        main,
-        args.mountpoint,
-        foreground=args.debug,
-        nothreads=False,
-        allow_other=True,
-    )
+    try:
+        fuse = FUSE(
+            main,
+            args.mountpoint,
+            foreground=args.debug,
+            nothreads=False,
+            allow_other=True,
+        )
+    except Exception as e:
+        pass
+
+if __name__ == '__main__':
+    main()
