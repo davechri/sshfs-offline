@@ -12,15 +12,13 @@ from sshfs_offline import sftp
 
 from fuse import FUSE, FuseOSError, Operations
 
-from sshfs_offline import data
-from sshfs_offline import metadata
+from sshfs_offline.cache import data
+from sshfs_offline.cache import metadata
 from sshfs_offline import log
 
 class Main(Operations):
     '''
-    A simple SFTP filesystem. Requires paramiko: http://www.lag.net/paramiko/
-
-    You need to be able to login o remote host without entering a password.
+    SSH File System with offline access to cached files.
     '''
 
     HOME_DIR = str(Path.home())
@@ -30,11 +28,14 @@ class Main(Operations):
         self.debug = args.debug       
         host = args.host
         user = args.user
-        remotedir = args.remotedir
+        if args.remotedir == None:
+            remotedir = os.path.join('/home', user)
+        else:
+            remotedir = args.remotedir
         port = args.port
                
         self.log = getLogger(log.MAIN)
-        
+       
         metrics.counts = metrics.Metrics()
         sftp.manager = sftp.SFTPManager(host, user, remotedir, port) 
         metadata.cache = metadata.Metadata(host, remotedir, args.cachetimeout)
@@ -310,7 +311,7 @@ def main():
     parser.add_argument('mountpoint', help='local mount point (eg, ~/mnt)')
     parser.add_argument('-p', '--port', help='port number (default=22)', default=22)
     parser.add_argument('-u', '--user', help='user on remote host', default=getpass.getuser())
-    parser.add_argument('-d', '--remotedir', help='directory on remote host (eg, ~/)', default=Main.HOME_DIR)
+    parser.add_argument('-d', '--remotedir', help='directory on remote host (eg, ~/)')
     parser.add_argument('--debug', help='run in debug mode', action='store_true')
     parser.add_argument('--cachetimeout', type=int, help='duration in seconds to keep metadata cached (default is 5 minutes)', default=Main.CACHE_TIMEOUT)
 

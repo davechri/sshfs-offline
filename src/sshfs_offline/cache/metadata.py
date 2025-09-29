@@ -12,7 +12,7 @@ import time
 
 from errno import ENOENT
 
-from sshfs_offline import data
+from sshfs_offline.cache import data
 from sshfs_offline import metrics
 from sshfs_offline import sftp
 
