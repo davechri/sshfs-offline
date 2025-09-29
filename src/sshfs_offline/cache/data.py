@@ -13,7 +13,7 @@ from sshfs_offline import sftp
 
 from errno import ENOENT
 
-from sshfs_offline import metadata
+from sshfs_offline.cache import metadata
 
 from fuse import FuseOSError
 
