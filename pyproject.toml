@@ -7,7 +7,7 @@ dependencies = {file = ["requirements.txt"]}
 
 [project]
 name = "sshfs-offline"
-version = "0.0.6"
+version = "0.0.7"
 license = { text = "MIT" }
 dynamic = ["dependencies"]
 authors = [
