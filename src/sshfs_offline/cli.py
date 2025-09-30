@@ -140,7 +140,7 @@ class Main(Operations):
             dic = dict((key, getattr(stv, key)) for key in ('f_bavail', 'f_bfree',
                 'f_blocks', 'f_bsize', 'f_favail', 'f_ffree', 'f_files', 'f_flag',
                 'f_frsize', 'f_namemax'))
-            self.log.debug('<- statfs: %s %s', path, dic)  
+            self.log.debug('<- statfs: %s %s', path, dic)
             return dic
         except Exception as e:
             self.log.error('<- statfs: %s', path) 
@@ -287,14 +287,14 @@ class Main(Operations):
 
     def write(self, path, buf, offset, fh): 
         try:       
-            self.log.debug('-> write: %s %d', path, offset)
+            self.log.debug('-> write: %s size=%d offset=%d', path, len(buf), offset)
             metrics.counts.incr('write')
             metadata.cache.deleteMetadata(path)  
-            data.cache.removeStaleBlocks(path)
+            data.cache.deleteStaleFile(path)
             #self.log.debug('write: write to remote file %s %d', path, offset)
             with sftp.manager.sftp().open(sftp.fixPath(path), 'r+') as file:
                 file.seek(offset, 0)
-                file.write(buf)
+                file.write(buf)                
                 file.close()
             self.log.debug('<- write: %s %d', path, len(buf))
             return len(buf)
@@ -331,6 +331,9 @@ def main():
             foreground=args.debug,
             nothreads=False,
             allow_other=True,
+            big_writes=True,
+            max_read=sftp.BLOCK_SIZE, # Set max read size (e.g., 128KB)
+            max_write=sftp.BLOCK_SIZE, # Set max write size (e.g., 128KB)
         )
     except Exception as e:
         pass

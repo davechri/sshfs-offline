@@ -46,7 +46,10 @@ class Data:
         dataPath = self._dataPath(path)
        
         if os.path.exists(dataPath):
-            return os.statvfs(dataPath) 
+            dic = os.statvfs(dataPath) 
+            dic['f_bsize'] = sftp.BLOCK_SIZE
+            dic['f_frsize'] = sftp.BLOCK_SIZE
+            return dic
                     
     def deleteStaleFile(self, path, mtime: float=None ): 
         self.log.debug('deleteStaleFile: %s', path)    
