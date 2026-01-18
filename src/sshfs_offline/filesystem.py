@@ -9,7 +9,7 @@ from sshfs_offline import log
 
 from fuse import FUSE, FuseOSError, Operations
 
-from sshfs_offline import data
+from sshfs_offline import data, directories
 from sshfs_offline import metadata
 from sshfs_offline import db
 from sshfs_offline.log import logger
@@ -85,6 +85,7 @@ class FuseOps(Operations):
             metrics.counts.startExecution('init')
             metrics.counts.start()
             log.Log().setupConfig(common.debug, common.verbose)
+            directories.store.populateFromDb()
             heartbeat.monitor.start()  
             tupload.manager.start()
             tdownload.manager.start()
