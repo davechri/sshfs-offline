@@ -67,36 +67,11 @@ To unmount the filesystem:
 
     fusermount -u mountpoint
 
-Cache Implementation
-====================
-
-The data and metadata are cached in the **.sshfs-offline** directory.  In this example, the **test/myfile.txt** file has two 132K blocks.  The data is cached in the **data** sub-directory, and the metadata is cached in the **metadata** sub-directory.
-
-```sh
-➜  .sshfs-offline
-├── data
-│   └── localhost   # host name
-│       └── home
-│           └── dave
-│               └── test
-│                   └── myfile.txt 
-└── metadata
-    └── localhost   # host name
-        └── home
-            └── user                
-                ├── %test        # test direcotry
-                │   ├── getattr  # lstat status for directory
-                │   └── readdir  # directory entries
-                └── %test%myfile.txt  # test/myfile.txt file
-                    ├── blockmap      # track blocks that are cached
-                    └── getattr       # lstat status for file 
-```
-
 Debugging
 =========
 
-* Metrics are logged to the **~/.sshfs-offline/metrics.log** file.
-* In production  (--debug=False), the log level is set to **warning**, and logs are writtend to the **~/.sshfs-offline/error.log** file.
+* Metrics are logged to the **~/.sshfs-offline/<host_name>/metrics.log** file.
+* In production  (--debug=False), the log level is set to **warning**, and logs are writtend to the **~/.sshfs-offline/<host_name>/error.log** file.
 * If the --debug option is specified, the log level is set to **debug**, the process is run in the foreground, and logs are written to stdout.
 
 Using the tail command to follow the metrics:

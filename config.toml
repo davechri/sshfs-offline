@@ -1,0 +1,10 @@
+
+### This is the configuration file.
+### It should be placed in $HOME/.sshfs-offline/<host_name>config.toml
+
+# Directory names that are only created localy and not synced to Google Drive.
+# Files in local only directories are stored in the native filessystem for fast
+# updates.  Install directories are good candidates to be stored locally.
+local_only = [
+    "node_modules",    
+]
