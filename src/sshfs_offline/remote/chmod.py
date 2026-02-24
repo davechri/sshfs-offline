@@ -16,7 +16,7 @@ def execute(path:str, localId: str, mode: int, d: dict[str,any], runAsync: bool=
    
     oldMode = d['st_mode']
     d['st_mode'] = mode | ((stat.S_IFDIR | stat.S_IFLNK | stat.S_IFREG) & d['st_mode'])
-    if oldMode == d['st_mode']:
+    if oldMode == d['st_mode'] and runAsync:
         logger.info(f'remote.chmod: path={path} mode is unchanged {oct(mode)}')
         return
     metrics.counts.incr(f'chmod_{oct(oldMode)}_to_{oct(d["st_mode"])}')
