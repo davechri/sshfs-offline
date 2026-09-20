@@ -170,24 +170,20 @@ Mount Filesystem:
 sshfs-offline mount $MOUNTPOINT
 ```
 
-Build and run web application:
-```bash
-cd $MOUNTPOINT
-git clone https://github.com/allproxy/allproxy.git
-npm install
-npm run build
-npm start
-```
-
-Run python application:
+#### Setup to debug sshfs-offline
 ```bash
 cd $MOUNTPOINT
 git clone https://github.com/davechri/sshfs-offline.git
 python3 -m venv .venv
-source .venv/bin/activate
+b
 pip install -r requirements.txt
 pip install -e .
-./src/sshfs_offline/cli.py status
+```
+
+#### Mount local Downloads directory and use diff to verify 
+```bash
+./src/sshfs_offline/cli.py mount ~/mnt --host localhost --remotedir ~/Downloads
+diff -r ~/Downloads ~/mnt # the DownLoads directory and mnt directory should be identical
 ```
 
 ## Troubleshooting
@@ -213,7 +209,7 @@ sshfs-offline mount $MOUNTPOINT --host <your hostname> --debug &> ~/path_to_my_l
 Filesystem statistics are displayed every 10 seconds.
 
 ```sh
-sshfs-offline status
+sshfs-offline status --host <hostname>
 ```
 ```sh
 08:28:45 ONLINE:

@@ -19,14 +19,14 @@ def execute(path: str, deleteEntries=False) -> dict[str, str]:
     metrics.counts.incr('readdir_network')
     remoteStats.readdir += 1
     # 1757987266.8084266750 1757987266.8084266750 1767382078.5648721200 1000 1000 775 4096 d 1 444 .mirrorfs
-    (_, stdout, stderr) = cnn.getConnection().ssh.exec_command(f'find {cnn.fixPath(path)} -maxdepth 1 -printf "%T@ %C@ %A@ %U %G %m %s %y %n %i %P target=%l\n"', timeout=common.TIMEOUT) 
+    (_, stdout, stderr) = cnn.getConnection().ssh.exec_command(f'find "{os.path.join(common.remotedir, path[1:])}" -maxdepth 1 -printf "%T@ %C@ %A@ %U %G %m %s %y %n %i %P target=%l\n"', timeout=common.TIMEOUT) 
     stderr = stderr.read().decode('utf-8') 
     if 'No such file or directory' in stderr: # No such file or directory
         logger.debug(f'remote.readdir not found {path}')
         if deleteEntries:
-            oldEntries = metadata.cache.readdir(path)
-            if oldEntries is not None:
-                for name, localId in oldEntries.items():
+            deleteEntries = metadata.cache.readdir(path)
+            if deleteEntries is not None:
+                for name, localId in deleteEntries.items():
                     logger.info(f'remote.readdir deleting removed entry {name} from {path}')
                     data.cache.deleteByID(os.path.join(path, name), localId)               
                     metadata.cache.deleteMetadata(os.path.join(path, name), localId, 'remote.readdir: entry removed')
@@ -41,7 +41,7 @@ def execute(path: str, deleteEntries=False) -> dict[str, str]:
     
     with lock.get(path):        
         dirEntries = metadata.cache.readdir(path)
-        oldEntries = copy.deepcopy(dirEntries) if deleteEntries and dirEntries is not None else {}    
+        deleteEntries = copy.deepcopy(dirEntries) if deleteEntries and dirEntries is not None else {}    
         if dirEntries == None:
             dirEntries: dict[str, str] = {}
         lines = stdout.read().decode('utf-8').splitlines()        
@@ -108,7 +108,7 @@ def execute(path: str, deleteEntries=False) -> dict[str, str]:
                     )
                         
                 dirEntries[name] = thisDirectory.localId
-                oldEntries.pop(name, None)
+                deleteEntries.pop(name, None)
 
                 d = metadata.cache.getattr(path)
                 if d is not None:
@@ -146,7 +146,7 @@ def execute(path: str, deleteEntries=False) -> dict[str, str]:
                         d['st_ino'] = inode
                         metadata.cache.getattr_save(path, d)
                     dirEntries[name] = d['local_id']  
-                    oldEntries.pop(name, None)
+                    deleteEntries.pop(name, None)
                     continue 
             
             # If an event is queued for this inode, do not update the directory entry.        
@@ -176,18 +176,19 @@ def execute(path: str, deleteEntries=False) -> dict[str, str]:
 
             metadata.cache.getattr_save(os.path.join(path, name), d)
             dirEntries[name] = d['local_id']   
-            oldEntries.pop(name, None)
+            deleteEntries.pop(name, None)
 
             if len(target) > 0:            
                 metadata.cache.readlink_save(os.path.join(path, name), d['local_id'], target.rstrip())     
 
         if path != '/':
-            dirEntries['..'] = thisDirectory.localParentId
-            oldEntries.pop('..', None)
+            if thisDirectory.localParentId != None:
+                dirEntries['..'] = thisDirectory.localParentId
+            deleteEntries.pop('..', None)
 
         if deleteEntries:
-            for name, localId in oldEntries.items():
-                logger.info(f'remote.readdir deleting removed entry {name} from {path}')
+            for name, localId in deleteEntries.items():
+                logger.info(f'remote.readdir deleting entry {name} from {path}')
                 data.cache.deleteByID(os.path.join(path, name), localId)               
                 metadata.cache.deleteMetadata(os.path.join(path, name), localId, 'remote.readdir: entry removed')
 

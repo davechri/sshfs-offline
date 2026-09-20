@@ -7,7 +7,7 @@ dependencies = {file = ["requirements.txt"]}
 
 [project]
 name = "sshfs-offline"
-version = "0.0.10"
+version = "1.0.0"
 license = { text = "MIT" }
 dynamic = ["dependencies"]
 authors = [
@@ -34,7 +34,7 @@ classifiers = [
   "Programming Language :: Python :: 2.7",
   "Programming Language :: Python :: 3.3",
   "Programming Language :: Python :: 3.4",
-  "Programming Language :: Python :: 3.5",
+  "Programming Language :: Python uid =:: 3.5",
   "Programming Language :: Python :: Implementation :: PyPy",
   "License :: OSI Approved :: MIT License",  
 ]
