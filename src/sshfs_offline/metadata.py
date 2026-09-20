@@ -114,7 +114,7 @@ class Metadata:
             if localId == None:
                 root = directories.store.getDirectoryByPath('/')
                 if root == None:
-                    logger.error(f'metadata.getattr: root directory not found!')
+                    logger.warning(f'metadata.getattr: root directory not found!')
                     return None
                 localId = root.localId
         else:

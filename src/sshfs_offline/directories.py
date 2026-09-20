@@ -97,7 +97,10 @@ class Directories:
             directory = self.localOnlyDirectoriesByPath[path]
         else:
             metrics.counts.incr('directories_by_path_miss')
-        logger.debug(f'directories.getDirectoryByPath: path={path} {directory.__dict__ if directory else "not found"}')
+        if directory == None:
+            logger.info(f'directories.getDirectoryByPath not found: path={path}')
+        else:
+            logger.debug(f'directories.getDirectoryByPath: path={path} {directory.__dict__}')
         return directory
 
     def getDirectoryByLocalId(self, localId: str) -> Directory | None:
