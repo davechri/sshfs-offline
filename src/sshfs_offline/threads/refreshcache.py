@@ -40,7 +40,8 @@ def refreshAll() -> None:
         _, stdout, stderr = cnn.getConnection().ssh.exec_command(command)
         stderr = stderr.read().decode('utf-8') 
         if stderr != '':
-            logger.error(f'refreshcache.refreshAll: error during refresh script execution: {stderr}')   
+            if stderr.find('no matches found') == -1:            
+                logger.error(f'refreshcache.refreshAll: error during refresh script execution: {stderr}')   
         else:
             logger.info('refreshcache.refreshAll: refresh script executed successfully')
             for line in stdout.read().decode('utf-8').splitlines():
