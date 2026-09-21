@@ -77,9 +77,9 @@ def execute(path: str, deleteEntries=False) -> dict[str, str]:
             
             t = 'target='+target if len(target) > 0 else ''
             logger.debug(f'remote.readdir processing line: {parts} {t}')
-            ctime = float(parts[0])
-            atime = float(parts[1])
-            mtime = float(parts[2])
+            ctime = float(parts[0])            
+            mtime = float(parts[1])
+            atime = float(parts[2])
             _uid = int(parts[3])
             _gid = int(parts[4])
             mode = int(parts[5], 8)
