@@ -22,41 +22,60 @@ def refreshAll() -> None:
         return
     
     dirs = directories.store.getAllDirectories()
+    
+    i = 0
+    dirs2 = []
+    for directory in dirs:
+        dirs2.append(directory)
+        i = i + 1
+        if i % 10 == 0 or i == len(dirs):
+            _refreshDirs(dirs2)
+            dirs2 = []
+
+def _refreshDirs(dirs) -> bool:
+    global firstRefresh
+    global lastRefreshTime
     script: list[str] = []
     for directory in dirs:        
         if firstRefresh:            
-            readdir.execute(directory.path, deleteEntries=True)
-            firstRefresh = False
+            readdir.execute(directory.path, deleteEntries=True)                
             continue
         p = os.path.join(common.remotedir, directory.path[1:])
         cmin = int(time.time() - lastRefreshTime)        
-        script.append(f'find "{p.replace(" ", "\\ ")}" -maxdepth 1 -type d -cmin -{cmin}')
+        script.append(f'find \\"{p}\\" -maxdepth 1 -type d -cmin -{cmin}')        
 
     lastRefreshTime = time.time()
-       
+
+    if firstRefresh:
+        firstRefresh = False
+        return True
+    
     if len(script) > 0:
         command = f'echo "{'\n'.join(script)}" > /tmp/sshfs-refresh; chmod +x /tmp/sshfs-refresh; /tmp/sshfs-refresh'
         logger.info(f'refreshcache.refreshAll: executing refresh script on remote server {command}')
         _, stdout, stderr = cnn.getConnection().ssh.exec_command(command)
         stderr = stderr.read().decode('utf-8') 
-        if stderr != '':
-            if stderr.find('no matches found') == -1:            
-                logger.error(f'refreshcache.refreshAll: error during refresh script execution: {stderr}')   
+        if stderr != '':                      
+            logger.warning(f'refreshcache.refreshAll: error during refresh script execution: {stderr}')   
+            return False # failed
         else:
             logger.info('refreshcache.refreshAll: refresh script executed successfully')
-            for line in stdout.read().decode('utf-8').splitlines():
-                path = line.strip()               
-                path = path[len(common.remotedir):] if path.startswith(common.remotedir) else path      
-                path = os.path.normpath(path)    
-                logger.info(f'refreshcache.refreshAll: refreshing directory {path} -cmin -{cmin}')
+
+        for line in stdout.read().decode('utf-8').splitlines():
+            path = line.strip()               
+            path = path[len(common.remotedir):] if path.startswith(common.remotedir) else path      
+            path = os.path.normpath(path)    
+            logger.info(f'refreshcache.refreshAll: refreshing directory {path} -cmin -{cmin}')
+            readdir.execute(path, deleteEntries=True)
+
+        for line in stderr.splitlines():
+            # find: ‘xxxx’: No such file or directory
+            if 'No such file or directory' in line:
+                logger.info(f'refreshcache.refreshAll: directory not found during refresh: {line}')
+                path = line.split("'")[1]                   
+                path = path[len(common.remotedir):] if path.startswith(common.remotedir) else path 
+                path = os.path.normpath(path)
                 readdir.execute(path, deleteEntries=True)
 
-            for line in stderr.splitlines():
-                # find: ‘xxxx’: No such file or directory
-                if 'No such file or directory' in line:
-                   logger.info(f'refreshcache.refreshAll: directory not found during refresh: {line}')
-                   path = line.split("'")[1]                   
-                   path = path[len(common.remotedir):] if path.startswith(common.remotedir) else path 
-                   path = os.path.normpath(path)
-                   readdir.execute(path, deleteEntries=True)
+    return True
     

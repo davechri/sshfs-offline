@@ -175,7 +175,6 @@ sshfs-offline mount $MOUNTPOINT
 cd $MOUNTPOINT
 git clone https://github.com/davechri/sshfs-offline.git
 python3 -m venv .venv
-b
 pip install -r requirements.txt
 pip install -e .
 ```
@@ -183,6 +182,7 @@ pip install -e .
 #### Mount local Downloads directory and use diff to verify 
 ```bash
 ./src/sshfs_offline/cli.py mount ~/mnt --host localhost --remotedir ~/Downloads
+du -s ~/mnt # read metadata for all files and directories
 diff -r ~/Downloads ~/mnt # the DownLoads directory and mnt directory should be identical
 ```
 

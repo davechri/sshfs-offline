@@ -438,7 +438,8 @@ class FuseOps(Operations):
             metrics.counts.startExecution('utimens')
             logger.info('--> %s', path) 
             metrics.counts.incr('utimens')
-            utime.execute(path,None, times)            
+            d = metadata.cache.getattr(path, enoent_except=True)            
+            utime.execute(path, d.get('local_id'), times)            
             logger.info('<-- %s', path)        
         except Exception as e:
             self._handleException('utimens', f'<-- {path}', e)

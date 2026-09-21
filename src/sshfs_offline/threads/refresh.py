@@ -31,19 +31,21 @@ class Refresh:
         lastRefreshTime = 0
         while True:
             try:
-                metrics.counts.incr('refresh_wait')                
-                self.event.wait()              
-                metrics.counts.incr('refresh_start')
                 metrics.counts.startExecution('refresh')
 
-                eventq.queue.executeEvents() # Execute any pending events first
+                metrics.counts.incr('refresh_wait')                
+                self.event.wait()
                  
                 # Update cached data at least every common.updateinterval seconds
                 elapsed = time.time() - lastRefreshTime
-                if elapsed > common.updateinterval:  
+                if elapsed >= common.updateinterval:  
+                    metrics.counts.incr('refresh_start')
+    
+                    eventq.queue.executeEvents() # Execute any pending events first
+                    
                     metrics.counts.incr('refresh', int(elapsed))
                                             
-                    lastRefreshTime =  time.time() + common.updateinterval
+                    lastRefreshTime =  time.time()
                 
                     if tdelete.manager.activeThreadCount > 0 or tdelete.manager.queue.qsize() > 0 or tcreate.manager.activeThreadCount > 0 or tcreate.manager.queue.qsize() > 0:
                         metrics.counts.incr('refresh_delay_for_gddelete')
